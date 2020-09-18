@@ -1,0 +1,434 @@
+import nltk
+import string
+import re
+import csv
+import math
+import pandas as pd
+from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory, StopWordRemover, ArrayDictionary
+from nltk.tokenize import word_tokenize
+
+########################## PREPROCESSING ##########################
+# Parsing
+def parsing(file):
+    result = []
+    with open(file, "r", encoding='utf-8') as csv_file:
+        csv_read = csv.DictReader(csv_file)
+        for baris in csv_read:
+            result.append(baris)
+    return result
+
+def parsing_uji(file):
+    f1 = open(file, "r", encoding='utf-8')
+    caption = f1.read()
+    f1.close()
+    capt2 = caption.splitlines()
+    array_caption = []
+    for a in capt2:
+        array_caption.append([a])
+    return array_caption
+
+def ubah_dict(hasil_parsing):
+    result = []
+    for data_tweet in hasil_parsing:
+        dict_tweet = {}
+        for j, k in data_tweet.items():
+            dict_tweet[j] = k
+        result.append(dict_tweet)
+    return result
+
+#Parsing Data uji
+def baca_datauji(file):
+    result = []
+    temp = []
+    with open(file) as csv_file:
+        csv_read = csv.reader(csv_file, delimiter=",")
+        for baris in csv_read:
+            temp.append(baris)
+    temp.pop(0)
+    for i in temp:
+        result.append([i[0]])
+    return result
+
+def cleaning(hasil_pasing):
+    result = []
+    for i in hasil_pasing:
+        for j in i:
+            j = re.sub(r'\w+:\/{2}[\d\w-]+(\.[\d\w-]+)*(?:(?:\/[^\s/]*))*', '', j)
+            j = re.sub('[^A-Za-z0-9]+', ' ', j) #remove tanda
+            result.append([j])
+    return result
+
+def remove_punct(text):
+    new_words = []
+    for i in text:
+        for word in i:
+            w = re.sub(r'[^\w\s]','',word) #remove everything except words and space#how 
+                                            #to remove underscore as well
+            w = re.sub(r'\_','',w)
+            new_words.append(w)
+    return new_words
+
+#case folding
+def case_folding(hasil_parsing):
+    result = []
+    for i in hasil_parsing:
+        for j in i:
+            if j != "":
+                j = j.translate(str.maketrans('','',string.punctuation)).lower()
+                result.append([j])
+                
+    return result
+
+# Tokenisasi
+def tokenisasi(hasil_case_folding):
+    result = []
+    for a in hasil_case_folding:
+        for b in a:
+            tokens = word_tokenize(b)
+            result.append(tokens)
+    return result
+
+#filtering
+def filtering(hasil_token):
+    result = []
+    factory = StopWordRemoverFactory().get_stop_words()
+    dictionary = ArrayDictionary(factory)
+    stopword = StopWordRemover(dictionary)
+    for kata in hasil_token:
+        temp = []
+        for i in kata:
+            output = stopword.remove(i)
+            temp.append(output)
+        result.append(temp)
+    return result
+
+def remove_stopword(hasil_token):
+    stopword = pd.read_csv('D://dataset/stopword_list_tala.csv')
+
+    result = []
+    for docs in hasil_token:
+        temp = []
+        for kata in docs:
+            if kata not in stopword.values:
+                temp.append(kata)
+        result.append(temp)
+    return result
+# Stemming
+def stemming(hasil_token):
+    factory = StemmerFactory()
+    stemmer = factory.create_stemmer()
+    stem = []
+    result = []
+    for kata in hasil_token:
+        temp = []
+        for x in kata:
+            output = stemmer.stem(x)
+            if output == '':
+                output = x
+            temp.append(output)
+        result.append(temp)
+    return result
+
+def dictio(stemming):
+    dict_doc = {}
+    doc = 1
+    for i in stemming:
+        dict_doc[doc] = i
+        doc+=1
+    return dict_doc
+
+####################################################
+########################## Information Gain ##########################
+
+def tf_biner(stem_words):
+    result = []
+    for docs in stem_words:
+        nilai_stem = []
+        for words in docs:
+            if words not in nilai_stem:
+                nilai_stem.append(words)
+        result.append(nilai_stem)
+
+    return result
+
+def kelas_docs(stem_words):
+    result = []
+    for docs in stem_words:
+        for kelas in docs.get('Kelas'):
+            result.append([kelas])
+    return result
+
+def hitung_kelas(document):
+    result = {}
+    pos = 0
+    neg = 0
+    total = 0
+    for docs in document:
+        for i in docs.get('Kelas'):
+            if i == '1':
+                pos+=1
+                result['positif'] = pos
+            else:
+                neg+=1
+                result['negatif'] = neg
+            total +=1
+            result['total'] = total
+    return result
+    
+def entropy(kelas):
+    result = []
+    prob1 = kelas.get('positif')/kelas.get('total')
+    prob2 = kelas.get('negatif')/kelas.get('total')
+    entropy1 = prob1 * math.log10(prob1)
+    entropy2 = prob2 * math.log10(prob2)
+    result.append(-(entropy1 + entropy2))
+    return result
+
+def frekuensi_pos(hasil_stem,term,kelas):
+    result = {}
+    term_unik = []
+    urut_kelas = []
+    for i in term:
+        for j in i:
+            term_unik.append(j)
+
+    for i in kelas:
+        for j in i:
+            urut_kelas.append(j)
+
+    for i in term_unik:
+        temp_pos = 0
+        for j,m in zip(hasil_stem,urut_kelas):
+            for k in j:
+                if m == "1":
+                    if i == k:
+                        temp_pos += 1
+            result[i] = temp_pos
+    return result
+
+def frekuensi_neg(hasil_stem,term,kelas):
+    result = {}
+    term_unik = []
+    urut_kelas = []
+    for i in term:
+        for j in i:
+            term_unik.append(j)
+
+    for i in kelas:
+        for j in i:
+            urut_kelas.append(j)
+
+    for i in term_unik:
+        temp_neg = 0
+        for j,m in zip(hasil_stem,urut_kelas):
+            for k in j:
+                if m == "0":
+                    if i == k:
+                        temp_neg += 1
+            result[i] = temp_neg
+    return result
+
+def info_gain(entropy,positif,negatif,term,kelas):
+    result = {}
+    
+    for i in term:
+        gain = 0
+        gain_pos = 0
+        gain_neg = 0
+        for j in i:
+            pos1 = (positif[j])
+            neg1 = (negatif[j])
+            pos0 = (3-positif[j])
+            neg0 = (3-negatif[j])
+            gain_pos = (((positif[j]+negatif[j])/kelas['total'])*((positif[j]/kelas['positif']) * (math.log10(positif[j]/kelas['positif']) if pos1 > 0 else 0) + (negatif[j]/kelas['negatif']) * (math.log10(negatif[j]/kelas['negatif']) if neg1 > 0 else 0)))
+            gain_neg = (((6-positif[j]-negatif[j])/kelas['total'])*(((3-positif[j])/kelas['positif']) * (math.log10((3-positif[j])/kelas['positif']) if pos0 > 0 else 0) + ((3-negatif[j])/kelas['negatif']) * (math.log10((3-negatif[j])/kelas['negatif']) if neg0 > 0 else 0)))
+            gain = entropy[0] + gain_pos + gain_neg
+            result[j] = gain
+    return result
+
+def threshold(ig):
+    t = 0.17
+    result = []
+    for i in ig:
+        if ig[i]>= t:
+            result.append(i)
+    return result
+
+
+####################################################
+########################## TF-IDF ##########################
+
+def df(hasil_seleksi, hasil_stemming):
+    result = []
+    for i in hasil_seleksi:
+        jmlh_kata = 0
+        for j in hasil_stemming:
+            for k in j:
+                if i == k:
+                    jmlh_kata +=1
+        result.append(jmlh_kata)
+    return result
+
+def seleksi(hasil_seleksi, hasil_stemming):
+    result = []
+    for i in hasil_stemming:
+        temp = []
+        for j in i:
+            for k in hasil_seleksi:
+                if j == k:
+                    temp.append(j)
+        result.append(temp)
+    return result
+
+def tf(hasil_seleksi, hasil_stemming):
+    result = []
+    for i in hasil_stemming:
+        temp = []
+        for j in i:
+            jmlh_kata = 0
+            for k in hasil_seleksi:
+                if j == k:
+                    jmlh_kata +=1
+                    temp.append(jmlh_kata)
+        result.append(temp)
+    return result
+
+def log_tf(tf):
+    result = []
+    for i in tf:
+        temp = []
+        for j in i:
+            j = 1 + math.log10(j)
+            temp.append(j)
+        result.append(temp)
+    return result
+
+def idf(df, kelas, hasil_seleksi):
+    result = {}
+    for i,j in zip(df, hasil_seleksi):
+        i = math.log10((kelas['total']/i))
+        result[j] = i
+    return result
+
+def tf_idf(log_tf,idf,seleksi):
+    result = []
+    for i,y in zip(log_tf,seleksi):
+        temp = []
+        for j,z in zip(i,y):
+            for k in idf:
+                if z == k:
+                    j = j * idf[k]
+                    temp.append(j)
+        result.append(temp)
+    return result
+
+####################################################
+########################## Testing ##########################
+
+def banding_term(seleksi, stem_uji):
+    result = []
+    for docs in stem_uji:
+        temp = []
+        for kata in docs:
+            for term in seleksi:
+                if kata in term:
+                    temp.append(kata)
+        result.append(temp)
+    return result
+
+def cosim(tfidf_train, tfidf_test, term_train , term_test):
+    result = []
+    cos_sim = []
+    for i,j in zip(tfidf_train,term_train):
+        temp = []
+        for nilai,term in zip(i,j):
+            for k,l in zip(tfidf_test, term_test):
+                for nilai_uji,term_uji in zip(k,l):
+                    if term == term_uji:
+                        nilai = nilai * nilai_uji
+                        temp.append(nilai)
+        cos_sim.append(temp)
+
+    for i in cos_sim:
+        total = 0
+        temp = []
+        for j in i:
+            total += j
+        temp.append(total)
+        result.append(temp)
+    return result
+
+# def sorted (cossim):
+#     dict_sort = {}
+#     sorting = 0
+#     num = 1
+#     for docs in cossim:
+#         for nilai in docs:
+#             dict_sort[num] = nilai
+#             num+=1
+
+#     for num in dict_sort:
+#         if dict_sort[num] >= sorting:
+#             sorting = dict_sort[num]
+#             temp.append(num)
+            
+#         elif dict_sort[num] < sorting:
+#             temp = dict_sort[num]
+#     return result
+            
+
+
+
+
+
+####################################################
+########################## MAIN ##########################
+def main():
+    #Preprocessing
+    parse_doklatih = parsing("D://dataset/data_coba.csv")
+    hasil_parse = ubah_dict(parse_doklatih) #mengetahui kelas
+    
+
+    parse_datauji = baca_datauji("D://dataset/data_coba.csv")
+    hasil_cleaning = cleaning(parse_datauji)
+    hasil_casefolding = case_folding(hasil_cleaning)
+    hasil_tokenisasi = tokenisasi(hasil_casefolding)
+    hasil_filtering = remove_stopword(hasil_tokenisasi)
+    hasil_stemming = stemming(hasil_filtering)
+    hah = dictio(hasil_stemming)
+
+    coba = tf_biner(hasil_stemming)
+    kelasapa = kelas_docs(hasil_parse)
+    print(kelasapa)
+    kelas = hitung_kelas(hasil_parse)
+    ent = entropy(kelas)
+    prob = frekuensi_pos(hasil_stemming,coba,kelasapa)
+    prob1 = frekuensi_neg(hasil_stemming,coba,kelasapa)
+    ig = info_gain(ent,prob,prob1,coba,kelas)
+    thres = threshold(ig)
+    
+    hasil_tf = tf(thres,hasil_stemming)
+    hasil_df = df(thres,hasil_stemming)
+    sleksi = seleksi(thres, hasil_stemming)
+    log = log_tf(hasil_tf)
+    inv_df = idf(hasil_df, kelas, thres)
+    tfidf =tf_idf(log,inv_df,sleksi)
+
+    parse_dokuji = parsing_uji("D://dataset/data_uji.txt")
+    clean_uji = cleaning(parse_dokuji)
+    casef_uji = case_folding(clean_uji)
+    token_uji = tokenisasi(casef_uji)
+    filter_uji = remove_stopword(token_uji)
+    stem_uji = stemming(filter_uji)
+    selek_uji = banding_term(thres,stem_uji)
+
+    tf_uji = tf(thres,selek_uji)
+    seleksi_uji = seleksi(thres, selek_uji)
+    log_uji = log_tf(tf_uji)
+    tfidf_uji =tf_idf(log_uji,inv_df,seleksi_uji)
+    cosine_sim = cosim(tfidf,tfidf_uji,sleksi,seleksi_uji)
+    # sorting = sorted(cosine_sim)
+    print(cosine_sim)
+
+main()
